@@ -12,11 +12,11 @@ npm install react-native-text-reader
 
 
 ```js
-import { multiply } from 'react-native-text-reader';
+import { read } from 'react-native-text-reader';
 
 // ...
 
-const result = await multiply(3, 7);
+const result = await read('imageUri');
 ```
 
 

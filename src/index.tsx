@@ -17,6 +17,26 @@ const TextReader = NativeModules.TextReader
       }
     );
 
-export function multiply(a: number, b: number): Promise<number> {
-  return TextReader.multiply(a, b);
+export type TextReaderOptions = {
+  visionIgnoreThreshold?: number;
+};
+
+type TextReaderType = {
+  read(imagePath: string, options?: TextReaderOptions): Promise<string[]>;
+};
+
+/**
+ * Extrae texto de una imagen.
+ * @param imagePath - La URI de la imagen de la que se extraerá el texto.
+ * @param options - Opciones adicionales.
+ * @param options.visionIgnoreThreshold - Umbral de ignoración de la visión.
+ * @returns Una promesa que se resuelve con el texto extraído.
+ */
+async function read(
+  imagePath: string,
+  options?: TextReaderOptions
+): Promise<string[]> {
+  return await TextReader.read(imagePath, options || {});
 }
+
+export default { read } as TextReaderType;
