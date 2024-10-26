@@ -28,11 +28,10 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.IOException
 import java.net.URL
 
-
 class TextReaderModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
-        override fun getName(): String {
-        return NAME
+    override fun getName(): String {
+        return "TextReader"
     }
 
     @Throws(IOException::class)
@@ -121,10 +120,12 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun read(url: String, script: String, promise: Promise) {
+    fun read(url: String, script: ReadableMap?, promise: Promise) {
         try {
             val image = getInputImage(reactApplicationContext, url)
-            val options = getScriptTextRecognizerOptions(script)
+            
+            val options = getScriptTextRecognizerOptions(script.toString())
+
             val recognizer: TextRecognizer = TextRecognition.getClient(options)
 
             recognizer.process(image)
@@ -148,9 +149,5 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
             e.printStackTrace()
             promise.reject("Text recognition failed", e)
         }
-    }
-
-    companion object {
-      const val NAME = "TextReader"
     }
 }
