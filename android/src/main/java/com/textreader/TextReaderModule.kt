@@ -120,11 +120,13 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun read(url: String, script: ReadableMap?, promise: Promise) {
+    fun read(url: String, options: ReadableMap?, promise: Promise) {
         try {
+            val script = options?.getString("script")
+
             val image = getInputImage(reactApplicationContext, url)
             
-            val options = getScriptTextRecognizerOptions(script.toString())
+            val options = getScriptTextRecognizerOptions(script)
 
             val recognizer: TextRecognizer = TextRecognition.getClient(options)
 

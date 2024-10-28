@@ -17,26 +17,38 @@ const TextReader = NativeModules.TextReader
       }
     );
 
-export type TextReaderOptions = {
-  visionIgnoreThreshold?: number;
+export enum ScriptOptions {
+  LATIN = 'Latin',
+  CHINESE = 'Chinese',
+  DEVANAGARI = 'Devanagari',
+  JAPANESE = 'Japanese',
+  KOREAN = 'Korean',
+}
+
+// Options
+export type Options = {
+  visionIgnoreThreshold?: number; // only iOS
+  script?: ScriptOptions; // only Android
 };
 
 type TextReaderType = {
-  read(imagePath: string, options?: TextReaderOptions): Promise<string[]>;
+  read(imagePath: string, options?: Options): Promise<string[]>;
 };
 
 /**
- * Extrae texto de una imagen.
- * @param imagePath - La URI de la imagen de la que se extraerá el texto.
- * @param options - Opciones adicionales.
- * @param options.visionIgnoreThreshold - Umbral de ignoración de la visión.
- * @returns Una promesa que se resuelve con el texto extraído.
+ * Extracts text from an image.
+ * @param imagePath - Image path
+ * @param options - Additional options
+ * @param options.visionIgnoreThreshold - Vision ignore threshold(iOS)
+ * @param options.script - Language script (Android)
  */
-async function read(
-  imagePath: string,
-  options?: TextReaderOptions
-): Promise<string[]> {
-  return await TextReader.read(imagePath, options || {});
+async function read(imagePath: string, options: Options): Promise<string[]> {
+  return await TextReader.read(
+    imagePath,
+    options || {
+      script: ScriptOptions.LATIN,
+    }
+  );
 }
 
 export default { read } as TextReaderType;
