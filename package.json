@@ -1,6 +1,6 @@
 {
   "name": "react-native-text-reader",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A React Native library for OCR (Optical Character Recognition) using Vision Framework on iOS and Firebase ML Kit on Android.",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
