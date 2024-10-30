@@ -33,6 +33,10 @@ class TextReader: NSObject {
         self.handleTextRecognitionResult(request: request, threshold: threshold, error: error, resolve: resolve, reject: reject)
       }
 
+      if #available(iOS 16.0, *) {
+        ocrRequest.automaticallyDetectsLanguage = true
+      }
+
       try requestHandler.perform([ocrRequest])
     } catch {
       reject("ERR_IMAGE_LOADING", "Failed to load or process the image: \(error.localizedDescription)", nil)
@@ -51,7 +55,7 @@ class TextReader: NSObject {
     }
 
     if observations.isEmpty {
-      reject("ERR_NO_TEXT_FOUND", "No text found in the image.", nil)
+      resolve([])
       return
     }
 
