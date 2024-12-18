@@ -118,7 +118,8 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
             else -> TextRecognizerOptions.DEFAULT_OPTIONS
         }
     }
-
+    
+    @ReactMethod
     fun read(url: String, options: ReadableMap?, promise: Promise) {
         try {
             val script = options?.getString("script")
