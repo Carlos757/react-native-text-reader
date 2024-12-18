@@ -36,6 +36,7 @@ class TextReader: NSObject {
       if #available(iOS 16.0, *) {
         ocrRequest.automaticallyDetectsLanguage = true
       }
+      ocrRequest.recognitionLevel = .accurate
 
       try requestHandler.perform([ocrRequest])
     } catch {

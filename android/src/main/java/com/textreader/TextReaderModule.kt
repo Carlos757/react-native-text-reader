@@ -119,29 +119,24 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    @ReactMethod
     fun read(url: String, options: ReadableMap?, promise: Promise) {
         try {
             val script = options?.getString("script")
 
             val image = getInputImage(reactApplicationContext, url)
-            
             val options = getScriptTextRecognizerOptions(script)
 
             val recognizer: TextRecognizer = TextRecognition.getClient(options)
 
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    val result = Arguments.createMap()
-                    result.putString("text", visionText.text)
-
-                    val blocksArray = Arguments.createArray()
+                    val linesArray = Arguments.createArray()
                     visionText.textBlocks.forEach { block ->
-                        blocksArray.pushMap(blockToMap(block))
+                        block.lines.forEach { line ->
+                            linesArray.pushString(line.text)
+                        }
                     }
-                    result.putArray("blocks", blocksArray)
-
-                    promise.resolve(result)
+                    promise.resolve(linesArray)
                 }
                 .addOnFailureListener { e ->
                     e.printStackTrace()
