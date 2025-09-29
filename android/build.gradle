@@ -8,7 +8,7 @@ buildscript {
   }
 
   dependencies {
-    classpath "com.android.tools.build:gradle:7.2.1"
+    classpath "com.android.tools.build:gradle:8.5.1"
     // noinspection DifferentKotlinGradleVersion
     classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
   }
@@ -71,6 +71,9 @@ android {
     }
   }
 
+  // Optimized for 16KB page size - AGP 8.5.1 handles alignment automatically
+  // Removed useLegacyPackaging to use modern packaging with better performance
+
   lintOptions {
     disable "GradleCompatible"
     abortOnError false
@@ -96,6 +99,7 @@ dependencies {
   implementation "com.facebook.react:react-native:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 
+  // ML Kit Text Recognition - Latest versions (2024)
   // To recognize Latin script
   implementation 'com.google.mlkit:text-recognition:16.0.1'
   // To recognize Chinese script
@@ -105,6 +109,9 @@ dependencies {
   // To recognize Japanese script
   implementation 'com.google.mlkit:text-recognition-japanese:16.0.1'
   // To recognize Korean script
-  implementation 'com.google.mlkit:text-recognition-korean:16.0.1'  
+  implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
+  
+  // ML Kit Common library for better performance
+  implementation 'com.google.mlkit:common:18.11.0'  
 }
 
