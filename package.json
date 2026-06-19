@@ -147,8 +147,13 @@
   },
   "eslintConfig": {
     "root": true,
-    "extends": ["@react-native", "prettier"],
-    "plugins": ["prettier"],
+    "extends": [
+      "@react-native",
+      "prettier"
+    ],
+    "plugins": [
+      "prettier"
+    ],
     "rules": {
       "react/react-in-jsx-scope": "off",
       "prettier/prettier": [
@@ -163,7 +168,11 @@
       ]
     }
   },
-  "eslintIgnore": ["node_modules/", "lib/", "example/"],
+  "eslintIgnore": [
+    "node_modules/",
+    "lib/",
+    "example/"
+  ],
   "prettier": {
     "quoteProps": "consistent",
     "singleQuote": true,
