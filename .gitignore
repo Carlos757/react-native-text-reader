@@ -68,6 +68,9 @@ android/keystores/debug.keystore
 !.yarn/sdks
 !.yarn/versions
 
+# pnpm
+.pnpm-store/
+
 # Expo
 .expo/
 

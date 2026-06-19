@@ -1,4 +1,5 @@
 import Vision
+import UIKit
 
 extension String {
   func stripPrefix(_ prefix: String) -> String {
@@ -7,67 +8,226 @@ extension String {
   }
 }
 
+private struct RecognizedLine {
+  let text: String
+  let confidence: Float
+  let frame: CGRect
+}
+
+private struct TextCandidate {
+  let text: String
+  let confidence: Float
+  let box: CGRect
+  let midY: CGFloat
+  let minX: CGFloat
+}
+
 @objc(TextReader)
 class TextReader: NSObject {
-  @objc static func requiresMainQueueSetup() -> Bool { return true }
+  @objc static func requiresMainQueueSetup() -> Bool { return false }
 
   @objc(read:withOptions:withResolver:withRejecter:)
-  func read(imgPath: String, options: [String: Any], resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+  func read(
+    imgPath: String,
+    options: [String: Any],
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    recognizeText(imgPath: imgPath, options: options) { result in
+      switch result {
+      case .success(let lines):
+        resolve(lines.map { $0.text })
+      case .failure(let error):
+        reject(error.code, error.message, error.underlying)
+      }
+    }
+  }
+
+  @objc(readDetailed:withOptions:withResolver:withRejecter:)
+  func readDetailed(
+    imgPath: String,
+    options: [String: Any],
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    recognizeText(imgPath: imgPath, options: options) { result in
+      switch result {
+      case .success(let lines):
+        let lineTexts = lines.map { $0.text }
+        let details: [[String: Any]] = lines.map { line in
+          var detail: [String: Any] = [
+            "text": line.text,
+            "confidence": line.confidence,
+          ]
+          detail["frame"] = [
+            "top": Int(line.frame.origin.y * 1000),
+            "left": Int(line.frame.origin.x * 1000),
+            "width": Int(line.frame.width * 1000),
+            "height": Int(line.frame.height * 1000),
+          ]
+          return detail
+        }
+        resolve([
+          "fullText": lineTexts.joined(separator: "\n"),
+          "lines": lineTexts,
+          "details": details,
+        ])
+      case .failure(let error):
+        reject(error.code, error.message, error.underlying)
+      }
+    }
+  }
+
+  private struct ReaderError: Error {
+    let code: String
+    let message: String
+    let underlying: Error?
+  }
+
+  private func recognizeText(
+    imgPath: String,
+    options: [String: Any],
+    completion: @escaping (Result<[RecognizedLine], ReaderError>) -> Void
+  ) {
     guard !imgPath.isEmpty else {
-      reject("ERR_EMPTY_PATH", "Image path cannot be empty.", nil)
+      completion(.failure(ReaderError(code: "ERR_EMPTY_PATH", message: "Image path cannot be empty.", underlying: nil)))
       return
     }
 
     let formattedImgPath = imgPath.stripPrefix("file://")
     let threshold = (options["visionIgnoreThreshold"] as? NSNumber)?.floatValue ?? 0.0
 
-    do {
-      let imgData = try Data(contentsOf: URL(fileURLWithPath: formattedImgPath))
-      guard let image = UIImage(data: imgData), let cgImage = image.cgImage else {
-        reject("ERR_IMAGE_PROCESSING", "Failed to load image from the provided path.", nil)
-        return
-      }
+    DispatchQueue.global(qos: .userInitiated).async {
+      do {
+        let imgData = try Data(contentsOf: URL(fileURLWithPath: formattedImgPath))
+        guard let image = self.fixedOrientationImage(from: imgData),
+              let cgImage = image.cgImage else {
+          completion(.failure(ReaderError(code: "ERR_IMAGE_PROCESSING", message: "Failed to load image from the provided path.", underlying: nil)))
+          return
+        }
 
-      let requestHandler = VNImageRequestHandler(cgImage: cgImage)
-      let ocrRequest = VNRecognizeTextRequest { request, error in
-        self.handleTextRecognitionResult(request: request, threshold: threshold, error: error, resolve: resolve, reject: reject)
-      }
+        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        let ocrRequest = VNRecognizeTextRequest { request, error in
+          if let error = error {
+            completion(.failure(ReaderError(code: "ERR_OCR", message: "Error in text recognition: \(error.localizedDescription)", underlying: error)))
+            return
+          }
 
-      if #available(iOS 16.0, *) {
-        ocrRequest.automaticallyDetectsLanguage = true
-      }
-      ocrRequest.recognitionLevel = .accurate
+          guard let observations = request.results as? [VNRecognizedTextObservation] else {
+            completion(.failure(ReaderError(code: "ERR_OCR_RESULTS", message: "Failed to read text from the image.", underlying: nil)))
+            return
+          }
 
-      try requestHandler.perform([ocrRequest])
-    } catch {
-      reject("ERR_IMAGE_LOADING", "Failed to load or process the image: \(error.localizedDescription)", nil)
+          let lines = self.groupObservationsIntoLines(observations: observations, threshold: threshold)
+          completion(.success(lines))
+        }
+
+        self.applyOptions(to: ocrRequest, from: options)
+
+        try requestHandler.perform([ocrRequest])
+      } catch {
+        completion(.failure(ReaderError(code: "ERR_IMAGE_LOADING", message: "Failed to load or process the image: \(error.localizedDescription)", underlying: error)))
+      }
     }
   }
 
-  private func handleTextRecognitionResult(request: VNRequest, threshold: Float, error: Error?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    if let error = error {
-      reject("ERR_OCR", "Error in text recognition: \(error.localizedDescription)", nil)
-      return
+  private func applyOptions(to request: VNRecognizeTextRequest, from options: [String: Any]) {
+    if #available(iOS 16.0, *) {
+      request.automaticallyDetectsLanguage = true
     }
 
-    guard let observations = request.results as? [VNRecognizedTextObservation] else {
-      reject("ERR_OCR_RESULTS", "Failed to read text from the image.", nil)
-      return
+    if let level = options["recognitionLevel"] as? String {
+      request.recognitionLevel = level == "fast" ? .fast : .accurate
+    } else {
+      request.recognitionLevel = .accurate
     }
 
-    if observations.isEmpty {
-      resolve([])
-      return
+    if let useCorrection = options["useLanguageCorrection"] as? Bool {
+      request.usesLanguageCorrection = useCorrection
     }
 
-    let extractedStrings = observations.compactMap { observation -> String? in
+    if let languages = options["recognitionLanguages"] as? [String], !languages.isEmpty {
+      request.recognitionLanguages = languages
+    }
+
+    if let customWords = options["customWords"] as? [String], !customWords.isEmpty {
+      request.customWords = customWords
+    }
+
+    if let minHeight = options["minimumTextHeight"] as? NSNumber {
+      request.minimumTextHeight = minHeight.floatValue
+    }
+  }
+
+  private func fixedOrientationImage(from data: Data) -> UIImage? {
+    guard let image = UIImage(data: data) else { return nil }
+    if image.imageOrientation == .up { return image }
+
+    UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
+    image.draw(in: CGRect(origin: .zero, size: image.size))
+    let normalized = UIGraphicsGetImageFromCurrentImageContext()
+    UIGraphicsEndImageContext()
+    return normalized
+  }
+
+  private func groupObservationsIntoLines(
+    observations: [VNRecognizedTextObservation],
+    threshold: Float
+  ) -> [RecognizedLine] {
+    let candidates: [TextCandidate] = observations.compactMap { observation in
       guard let topCandidate = observation.topCandidates(1).first else { return nil }
-      if topCandidate.confidence >= threshold {
-        return topCandidate.string
-      }
-      return nil
+      guard topCandidate.confidence >= threshold else { return nil }
+      let box = observation.boundingBox
+      return TextCandidate(
+        text: topCandidate.string,
+        confidence: topCandidate.confidence,
+        box: box,
+        midY: box.midY,
+        minX: box.minX
+      )
     }
 
-    resolve(extractedStrings.isEmpty ? [] : extractedStrings)
+    guard !candidates.isEmpty else { return [] }
+
+    let sorted = candidates.sorted { lhs, rhs in
+      if abs(lhs.midY - rhs.midY) > 0.02 {
+        return lhs.midY > rhs.midY
+      }
+      return lhs.minX < rhs.minX
+    }
+
+    var lines: [RecognizedLine] = []
+    var currentGroup: [TextCandidate] = []
+    var currentMidY: CGFloat?
+
+    for candidate in sorted {
+      if let midY = currentMidY, abs(candidate.midY - midY) <= 0.02 {
+        currentGroup.append(candidate)
+      } else {
+        if !currentGroup.isEmpty {
+          lines.append(self.mergeGroup(currentGroup))
+        }
+        currentGroup = [candidate]
+        currentMidY = candidate.midY
+      }
+    }
+
+    if !currentGroup.isEmpty {
+      lines.append(self.mergeGroup(currentGroup))
+    }
+
+    return lines
+  }
+
+  private func mergeGroup(_ group: [TextCandidate]) -> RecognizedLine {
+    let sortedGroup = group.sorted { $0.minX < $1.minX }
+    let text = sortedGroup.map { $0.text }.joined(separator: " ")
+    let confidence = sortedGroup.map { $0.confidence }.max() ?? 0
+    let minX = sortedGroup.map { $0.box.minX }.min() ?? 0
+    let minY = sortedGroup.map { $0.box.minY }.min() ?? 0
+    let maxX = sortedGroup.map { $0.box.maxX }.max() ?? 0
+    let maxY = sortedGroup.map { $0.box.maxY }.max() ?? 0
+    let frame = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    return RecognizedLine(text: text, confidence: confidence, frame: frame)
   }
 }

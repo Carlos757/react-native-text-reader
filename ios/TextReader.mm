@@ -8,6 +8,12 @@ RCT_EXTERN_METHOD(read
                   : (RCTPromiseResolveBlock)resolve withRejecter
                   : (RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(readDetailed
+                  : (NSString *)imgPath withOptions
+                  : (NSDictionary *)options withResolver
+                  : (RCTPromiseResolveBlock)resolve withRejecter
+                  : (RCTPromiseRejectBlock)reject)
+
 + (BOOL)requiresMainQueueSetup
 {
   return NO;

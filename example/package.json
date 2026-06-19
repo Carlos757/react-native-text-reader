@@ -1,0 +1,32 @@
+{
+  "name": "react-native-text-reader-example",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "pnpm exec expo start",
+    "android": "pnpm exec expo run:android",
+    "ios": "pnpm exec expo run:ios",
+    "prebuild": "pnpm exec expo prebuild"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~56.0.15",
+    "expo": "~56.0.12",
+    "expo-dev-client": "~56.0.20",
+    "expo-image-picker": "~56.0.18",
+    "expo-linking": "~56.0.14",
+    "expo-router": "~56.2.11",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.25.2",
+    "react-native-text-reader": "workspace:*"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@types/react": "~19.2.0",
+    "typescript": "~6.0.3"
+  }
+}

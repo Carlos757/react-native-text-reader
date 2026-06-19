@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "TextReaderExample",
+    "slug": "text-reader-example",
+    "version": "1.0.0",
+    "scheme": "text-reader-example",
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      "react-native-text-reader"
+    ],
+    "android": {
+      "package": "com.textreader.example",
+      "minSdkVersion": 23
+    },
+    "ios": {
+      "bundleIdentifier": "com.textreader.example"
+    }
+  }
+}

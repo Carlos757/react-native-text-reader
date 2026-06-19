@@ -4,23 +4,21 @@ description: Setup Node.js and install dependencies
 runs:
   using: composite
   steps:
+    - name: Enable corepack
+      run: corepack enable
+      shell: bash
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 11
+
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version-file: .nvmrc
-
-    - name: Cache dependencies
-      id: npm-cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          **/node_modules
-        key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/package.json', '!node_modules/**') }}
-        restore-keys: |
-          ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
-          ${{ runner.os }}-npm-
+        cache: pnpm
 
     - name: Install dependencies
-      if: steps.npm-cache.outputs.cache-hit != 'true'
-      run: npm ci
+      run: pnpm install --frozen-lockfile
       shell: bash

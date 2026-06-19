@@ -1,0 +1,16 @@
+packages:
+  - '.'
+  - 'example'
+
+# Dev monorepo: allow latest releases during dependency upgrades
+minimumReleaseAge: 0
+
+allowBuilds:
+  '@evilmartians/lefthook': true
+  unrs-resolver: true
+
+overrides:
+  '@types/react': '^19.2.17'
+  undici: '>=7.28.0'
+  tar: '>=7.5.11'
+  '@xmldom/xmldom': '0.8.13'

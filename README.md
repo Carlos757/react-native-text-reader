@@ -1,7 +1,6 @@
 # `react-native-text-reader`
 
-A simple React Native library for extracting text from images using native iOS (Vision Framework) and Android (ML Kit) capabilities.
-
+A React Native library for extracting text from images using native iOS (Vision Framework) and Android (ML Kit) capabilities.
 
 ## Table of Contents
 
@@ -9,92 +8,120 @@ A simple React Native library for extracting text from images using native iOS (
 - [Platform Setup](#platform-setup)
   - [iOS](#ios)
   - [Android](#android)
+  - [Expo](#expo)
 - [Usage](#usage)
   - [Basic Example](#basic-example)
+  - [Detailed Result](#detailed-result)
 - [Options](#options)
 - [ScriptOptions Enum](#scriptoptions-enum)
 - [Contributing](#contributing)
 - [License](#license)
 
-### NOTE:
- I currently do not work extensively with React Native, so this project may not receive frequent updates. However, if anyone is interested in contributing, please feel free to reach out!
-
 ## Installation
 
-Install the package using npm or yarn:
+Install the package with your preferred package manager:
 
 ```bash
 npm install react-native-text-reader
 ```
 
-or
+```bash
+pnpm add react-native-text-reader
+```
 
 ```bash
 yarn add react-native-text-reader
 ```
 
-After installing the package, make sure to link the native dependencies:
+The published package is package-manager agnostic. Use whichever tool your app already uses.
 
 ### iOS
 
-If you're using iOS, run the following command to install the necessary native modules:
-
 ```bash
-cd ios/ && pod install
+cd ios && pod install
 ```
 
 ### Android
 
-No additional steps are required for Android.
+No additional manual steps are required. Autolinking handles native setup.
 
----
+## Expo
+
+This library uses custom native code (Vision + ML Kit), so it does **not** work in **Expo Go**.
+
+It **does** work with Expo development builds and EAS Build (tested with **Expo SDK 56**):
+
+```bash
+npx expo install react-native-text-reader expo-dev-client
+```
+
+Add the config plugin to your `app.json`:
+
+```json
+{
+  "expo": {
+    "plugins": ["react-native-text-reader"]
+  }
+}
+```
+
+Then create native projects and run a dev build:
+
+```bash
+npx expo prebuild
+npx expo run:ios
+# or
+npx expo run:android
+```
 
 ## Usage
 
-To use the text reader, import it and call the `read` method with the image path and options.
-
 ### Basic Example
 
-```javascript
+```typescript
 import TextReader, { ScriptOptions } from 'react-native-text-reader';
 
-const imagePath = 'path/to/your/image.jpg';
-const options = {
-  visionIgnoreThreshold: 0.5, // iOS only
-  script: ScriptOptions.LATIN, // Android only
-};
+const imagePath = 'file:///path/to/your/image.jpg';
 
-const readTextFromImage = async () => {
-  try {
-    const text = await TextReader.read(imagePath, options);
-    console.log('Extracted text:', text);
-  } catch (error) {
-    console.error('Error reading text:', error);
-  }
-};
+const lines = await TextReader.read(imagePath, {
+  visionIgnoreThreshold: 0.5, // iOS
+  confidenceThreshold: 0.5, // Android
+  script: ScriptOptions.LATIN, // Android
+});
 
-readTextFromImage();
-
+console.log('Extracted lines:', lines);
 ```
 
----
+`read()` returns `Promise<string[]>` — one entry per detected line.
+
+### Detailed Result
+
+```typescript
+const result = await TextReader.readDetailed(imagePath, {
+  script: ScriptOptions.LATIN,
+});
+
+console.log(result.fullText);
+console.log(result.lines);
+console.log(result.details); // confidence, frame, languages
+```
 
 ## Options
 
-### `Options`
-
-| Property                  | Type              | Description                                          |
-|--------------------------|-------------------|------------------------------------------------------|
-| `visionIgnoreThreshold`  | `number`          | The confidence threshold for iOS (default: 0.0)     |
-| `script`                 | `ScriptOptions`   | The language script for Android (default: `LATIN`)  |
-
----
+| Property | Type | Platform | Description |
+|----------|------|----------|-------------|
+| `visionIgnoreThreshold` | `number` | iOS | Confidence threshold (default: `0`) |
+| `confidenceThreshold` | `number` | Android | Confidence threshold (default: `0`) |
+| `script` | `ScriptOptions` | Android | Script model (default: `LATIN`) |
+| `recognitionLevel` | `'fast' \| 'accurate'` | iOS | Speed vs accuracy (default: `accurate`) |
+| `recognitionLanguages` | `string[]` | iOS | Language hints, e.g. `['en-US']` |
+| `customWords` | `string[]` | iOS | Domain vocabulary hints |
+| `useLanguageCorrection` | `boolean` | iOS | Enable language correction |
+| `minimumTextHeight` | `number` | iOS | Ignore text smaller than this fraction |
 
 ## ScriptOptions
 
-The `ScriptOptions` enum allows you to specify different language scripts for Android:
-
-```javascript
+```typescript
 export enum ScriptOptions {
   LATIN = 'Latin',
   CHINESE = 'Chinese',
@@ -104,14 +131,10 @@ export enum ScriptOptions {
 }
 ```
 
----
-
 ## Contributing
 
-Contributions are welcome! Please submit a pull request or open an issue for any enhancements or bugs.
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md). Development in this repository uses **pnpm**.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
