@@ -1,6 +1,6 @@
 {
   "name": "react-native-text-reader",
-  "version": "2.0.0",
+  "version": "1.5.0",
   "description": "A React Native library for OCR using Vision Framework on iOS and ML Kit on Android. Supports Expo development builds, detailed OCR metadata, and Android 16KB page size compatibility.",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
