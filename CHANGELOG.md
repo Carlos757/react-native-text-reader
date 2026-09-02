@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Android build broke for every consumer of 2.1.0**: `blockToMap()` still called the previous one-argument `lineToMap()`, so `:react-native-text-reader:compileDebugKotlin` failed with *No value passed for parameter 'imageWidth'*. The function was dead code — blocks are not part of the JS API on either platform — so it was removed rather than repaired. Nothing else in the module referenced it.
+
+### Security
+
+- Pinned the transitive development dependencies flagged by `pnpm audit` (brace-expansion, browserslist, fast-uri, ip-address, js-yaml, nanoid, postcss, shell-quote, undici, @xmldom/xmldom) through version-scoped overrides. All of them come from Metro, Babel, Jest, ESLint or the example app; the published package has no runtime dependencies, so no consumer was ever exposed.
+
+## 2.1.0
+
 ### Added
 
 - `readDocument()`: preset for printed documents (ID cards, forms). Uses `accurate` recognition, **disables language correction** — which otherwise pushes codes like an MRZ or a Mexican CURP toward dictionary words — and returns word-level boxes.

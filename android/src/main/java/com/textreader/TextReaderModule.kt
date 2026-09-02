@@ -185,21 +185,6 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  private fun blockToMap(block: Text.TextBlock): WritableMap {
-    return Arguments.createMap().apply {
-      putString("text", block.text)
-      block.boundingBox?.let { putMap("frame", rectToMap(it)) }
-      block.cornerPoints?.let { putArray("cornerPoints", cornerPointsToMap(it)) }
-
-      val linesArray = Arguments.createArray()
-      block.lines.forEach { line ->
-        linesArray.pushMap(lineToMap(line))
-      }
-      putArray("lines", linesArray)
-      putArray("recognizedLanguages", langToMap(block.recognizedLanguage))
-    }
-  }
-
   @NonNull
   private fun getScriptTextRecognizerOptions(@Nullable script: String?): TextRecognizerOptionsInterface {
     return when (script) {
