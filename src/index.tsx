@@ -30,6 +30,10 @@ export enum ScriptOptions {
 
 export type RecognitionLevel = 'fast' | 'accurate';
 
+/**
+ * @deprecated Sus unidades y su origen difieren entre plataformas, así que no
+ * es comparable cross-platform. Usa `TextLine.box`.
+ */
 export type TextFrame = {
   top: number;
   left: number;
@@ -37,10 +41,31 @@ export type TextFrame = {
   height: number;
 };
 
+export type TextBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type TextWord = {
+  text: string;
+  box?: TextBox;
+  confidence?: number;
+};
+
 export type TextLine = {
   text: string;
+  /**
+   * Confianza del motor, 0-1, cuando la expone. `undefined` significa que no
+   * hay dato — nunca se rellena con un valor inventado.
+   */
   confidence?: number;
+  /** @deprecated Usa `box`. */
   frame?: TextFrame;
+  box?: TextBox;
+  /** Palabras de la línea; solo se llena si se pidió `includeWords`. */
+  words?: TextWord[];
   recognizedLanguages?: string[];
 };
 
@@ -48,6 +73,11 @@ export type DetailedResult = {
   fullText: string;
   lines: string[];
   details: TextLine[];
+  /**
+   * Sistema de coordenadas de las cajas. Ausente en módulos nativos anteriores
+   * a la 2.1, donde `box` tampoco existe.
+   */
+  coordinateSpace?: 'normalized-top-left';
 };
 
 export type Options = {
@@ -59,11 +89,16 @@ export type Options = {
   customWords?: string[];
   useLanguageCorrection?: boolean;
   minimumTextHeight?: number;
+  /** Devolver cada palabra con su caja, además de la línea completa. */
+  includeWords?: boolean;
+  /** Zona a leer, normalizada (0-1) con origen arriba-izquierda. */
+  regionOfInterest?: TextBox;
 };
 
 type TextReaderNative = {
   read(imagePath: string, options?: Options): Promise<string[]>;
   readDetailed(imagePath: string, options?: Options): Promise<DetailedResult>;
+  readDocument(imagePath: string, options?: Options): Promise<DetailedResult>;
 };
 
 const DEFAULT_OPTIONS: Options = {
@@ -74,14 +109,25 @@ function normalizeDetailedResult(result: DetailedResult): DetailedResult {
   return {
     fullText: result.fullText ?? '',
     lines: result.lines ?? [],
+    coordinateSpace: result.coordinateSpace,
     details: (result.details ?? []).map((detail) => ({
       text: detail.text,
       confidence: detail.confidence,
       frame: detail.frame,
+      box: detail.box,
+      words: detail.words,
       recognizedLanguages: detail.recognizedLanguages,
     })),
   };
 }
+
+const DOCUMENT_OPTIONS: Options = {
+  script: ScriptOptions.LATIN,
+  recognitionLevel: 'accurate',
+  useLanguageCorrection: false,
+  minimumTextHeight: 0.008,
+  includeWords: true,
+};
 
 /**
  * Extracts text lines from an image.
@@ -105,4 +151,11 @@ async function readDetailed(
   return normalizeDetailedResult(result);
 }
 
-export default { read, readDetailed } as TextReaderNative;
+async function readDocument(
+  imagePath: string,
+  options?: Options
+): Promise<DetailedResult> {
+  return readDetailed(imagePath, { ...DOCUMENT_OPTIONS, ...options });
+}
+
+export default { read, readDetailed, readDocument } as TextReaderNative;

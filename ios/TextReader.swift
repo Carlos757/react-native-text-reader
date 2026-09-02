@@ -8,10 +8,26 @@ extension String {
   }
 }
 
+private struct RecognizedWord {
+  let text: String
+  let confidence: Float
+  let box: CGRect
+}
+
 private struct RecognizedLine {
   let text: String
   let confidence: Float
   let frame: CGRect
+  let words: [RecognizedWord]
+}
+
+private func normalizedBoxPayload(_ box: CGRect) -> [String: Any] {
+  return [
+    "x": box.origin.x,
+    "y": 1.0 - box.origin.y - box.height,
+    "width": box.width,
+    "height": box.height,
+  ]
 }
 
 private struct TextCandidate {
@@ -54,6 +70,7 @@ class TextReader: NSObject {
       switch result {
       case .success(let lines):
         let lineTexts = lines.map { $0.text }
+        let includeWords = (options["includeWords"] as? Bool) ?? false
         let details: [[String: Any]] = lines.map { line in
           var detail: [String: Any] = [
             "text": line.text,
@@ -65,12 +82,23 @@ class TextReader: NSObject {
             "width": Int(line.frame.width * 1000),
             "height": Int(line.frame.height * 1000),
           ]
+          detail["box"] = normalizedBoxPayload(line.frame)
+          if includeWords {
+            detail["words"] = line.words.map { word in
+              [
+                "text": word.text,
+                "confidence": word.confidence,
+                "box": normalizedBoxPayload(word.box),
+              ] as [String: Any]
+            }
+          }
           return detail
         }
         resolve([
           "fullText": lineTexts.joined(separator: "\n"),
           "lines": lineTexts,
           "details": details,
+          "coordinateSpace": "normalized-top-left",
         ])
       case .failure(let error):
         reject(error.code, error.message, error.underlying)
@@ -148,6 +176,19 @@ class TextReader: NSObject {
 
     if let languages = options["recognitionLanguages"] as? [String], !languages.isEmpty {
       request.recognitionLanguages = languages
+    }
+
+    if let roi = options["regionOfInterest"] as? [String: Any],
+       let x = roi["x"] as? NSNumber,
+       let y = roi["y"] as? NSNumber,
+       let width = roi["width"] as? NSNumber,
+       let height = roi["height"] as? NSNumber {
+      request.regionOfInterest = CGRect(
+        x: CGFloat(truncating: x),
+        y: 1.0 - CGFloat(truncating: y) - CGFloat(truncating: height),
+        width: CGFloat(truncating: width),
+        height: CGFloat(truncating: height)
+      )
     }
 
     if let customWords = options["customWords"] as? [String], !customWords.isEmpty {
@@ -228,6 +269,9 @@ class TextReader: NSObject {
     let maxX = sortedGroup.map { $0.box.maxX }.max() ?? 0
     let maxY = sortedGroup.map { $0.box.maxY }.max() ?? 0
     let frame = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-    return RecognizedLine(text: text, confidence: confidence, frame: frame)
+    let words = sortedGroup.map {
+      RecognizedWord(text: $0.text, confidence: $0.confidence, box: $0.box)
+    }
+    return RecognizedLine(text: text, confidence: confidence, frame: frame, words: words)
   }
 }

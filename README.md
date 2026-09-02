@@ -103,8 +103,52 @@ const result = await TextReader.readDetailed(imagePath, {
 
 console.log(result.fullText);
 console.log(result.lines);
-console.log(result.details); // confidence, frame, languages
+console.log(result.details); // confidence, box, words, languages
 ```
+
+### Documents (ID cards, forms)
+
+`readDocument()` applies the settings that printed documents need: `accurate`
+recognition, **language correction off** — it would otherwise push codes like an
+MRZ or a Mexican CURP toward dictionary words — and word-level boxes.
+
+```typescript
+const result = await TextReader.readDocument(imagePath);
+
+for (const line of result.details) {
+  console.log(line.text, line.box); // { x, y, width, height }, 0-1
+  for (const word of line.words ?? []) {
+    console.log(' ', word.text, word.box);
+  }
+}
+```
+
+### Layout: `box` vs `frame`
+
+`box` is a normalized rect (`0-1`) with a **top-left origin**, identical on both
+platforms. Use it to reason about layout — columns, reading order, which value
+sits under which label:
+
+```typescript
+// Value in the same column as its label, rather than "the next line"
+const label = result.details.find((line) => line.text.includes('VIGENCIA'));
+const value = result.details.find(
+  (line) =>
+    line.box && label?.box &&
+    line.box.y > label.box.y &&
+    Math.abs(line.box.x - label.box.x) < 0.05
+);
+```
+
+> `frame` is **deprecated**. Its units and origin differ per platform (iOS:
+> normalized ×1000, bottom-left; Android: pixels, top-left), so it was never
+> comparable across platforms. It still ships unchanged for existing callers.
+
+### Confidence
+
+`confidence` is `undefined` when the engine reports no value — it is never
+filled in with a placeholder. Absence of a measurement is not a low
+measurement, and a fabricated `1.0` reads downstream as maximum certainty.
 
 ## Options
 
@@ -118,6 +162,8 @@ console.log(result.details); // confidence, frame, languages
 | `customWords` | `string[]` | iOS | Domain vocabulary hints |
 | `useLanguageCorrection` | `boolean` | iOS | Enable language correction |
 | `minimumTextHeight` | `number` | iOS | Ignore text smaller than this fraction |
+| `includeWords` | `boolean` | Both | Return each word with its own `box` and confidence |
+| `regionOfInterest` | `TextBox` | Both | Restrict recognition to a normalized area (`0-1`, top-left origin) |
 
 ## ScriptOptions
 

@@ -38,33 +38,63 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
   override fun getName(): String = "TextReader"
 
   @Throws(IOException::class)
+  private fun remoteBitmap(url: String): Bitmap {
+    val connection = URL(url).openConnection() as HttpURLConnection
+    connection.connectTimeout = HTTP_CONNECT_TIMEOUT_MS
+    connection.readTimeout = HTTP_READ_TIMEOUT_MS
+    connection.connect()
+
+    val contentLength = connection.contentLength
+    if (contentLength > MAX_IMAGE_BYTES) {
+      connection.disconnect()
+      throw IOException("Remote image exceeds maximum allowed size.")
+    }
+
+    val image: Bitmap? = connection.inputStream.use { stream ->
+      BitmapFactory.decodeStream(stream)
+    }
+    connection.disconnect()
+
+    return image ?: throw IOException("Failed to decode remote image.")
+  }
+
+  @Throws(IOException::class)
   private fun getInputImage(reactContext: ReactApplicationContext, url: String): InputImage {
     return if (url.contains("http://") || url.contains("https://")) {
-      val connection = URL(url).openConnection() as HttpURLConnection
-      connection.connectTimeout = HTTP_CONNECT_TIMEOUT_MS
-      connection.readTimeout = HTTP_READ_TIMEOUT_MS
-      connection.connect()
-
-      val contentLength = connection.contentLength
-      if (contentLength > MAX_IMAGE_BYTES) {
-        connection.disconnect()
-        throw IOException("Remote image exceeds maximum allowed size.")
-      }
-
-      val image: Bitmap? = connection.inputStream.use { stream ->
-        BitmapFactory.decodeStream(stream)
-      }
-      connection.disconnect()
-
-      if (image == null) {
-        throw IOException("Failed to decode remote image.")
-      }
-
-      InputImage.fromBitmap(image, 0)
+      InputImage.fromBitmap(remoteBitmap(url), 0)
     } else {
       val uri = Uri.parse(url)
       InputImage.fromFilePath(reactContext, uri)
     }
+  }
+
+  private fun croppedInputImage(
+    reactContext: ReactApplicationContext,
+    url: String,
+    region: ReadableMap
+  ): InputImage {
+    val bitmap = loadBitmap(reactContext, url)
+    val x = (region.getDouble("x") * bitmap.width).toInt().coerceIn(0, bitmap.width - 1)
+    val y = (region.getDouble("y") * bitmap.height).toInt().coerceIn(0, bitmap.height - 1)
+    val width = (region.getDouble("width") * bitmap.width).toInt()
+      .coerceIn(1, bitmap.width - x)
+    val height = (region.getDouble("height") * bitmap.height).toInt()
+      .coerceIn(1, bitmap.height - y)
+
+    return InputImage.fromBitmap(Bitmap.createBitmap(bitmap, x, y, width, height), 0)
+  }
+
+  @Throws(IOException::class)
+  private fun loadBitmap(reactContext: ReactApplicationContext, url: String): Bitmap {
+    if (url.contains("http://") || url.contains("https://")) {
+      return remoteBitmap(url)
+    }
+
+    val stream = reactContext.contentResolver.openInputStream(Uri.parse(url))
+      ?: throw IOException("Could not open image at $url")
+
+    return stream.use { BitmapFactory.decodeStream(it) }
+      ?: throw IOException("Failed to decode image at $url")
   }
 
   private fun rectToMap(rect: Rect): WritableMap {
@@ -95,24 +125,37 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  private fun lineConfidence(line: Text.Line): Float {
-    val elements = line.elements
-    if (elements.isEmpty()) return 1.0f
-    return elements.map { element ->
-      try {
-        val method = element.javaClass.getMethod("getConfidence")
-        (method.invoke(element) as? Float) ?: 1.0f
-      } catch (_: Exception) {
-        1.0f
-      }
-    }.average().toFloat()
+  private fun lineConfidence(line: Text.Line): Float? {
+    val confidences = line.elements.mapNotNull { it.confidence }
+    if (confidences.isEmpty()) {
+      return null
+    }
+    return confidences.average().toFloat()
   }
 
-  private fun lineToMap(line: Text.Line): WritableMap {
+  private fun normalizedBox(rect: Rect?, width: Int, height: Int): WritableMap? {
+    if (rect == null || width <= 0 || height <= 0) {
+      return null
+    }
+    return Arguments.createMap().apply {
+      putDouble("x", rect.left.toDouble() / width)
+      putDouble("y", rect.top.toDouble() / height)
+      putDouble("width", rect.width().toDouble() / width)
+      putDouble("height", rect.height().toDouble() / height)
+    }
+  }
+
+  private fun lineToMap(
+    line: Text.Line,
+    imageWidth: Int,
+    imageHeight: Int,
+    includeWords: Boolean
+  ): WritableMap {
     return Arguments.createMap().apply {
       putString("text", line.text)
-      putDouble("confidence", lineConfidence(line).toDouble())
+      lineConfidence(line)?.let { putDouble("confidence", it.toDouble()) }
       line.boundingBox?.let { putMap("frame", rectToMap(it)) }
+      normalizedBox(line.boundingBox, imageWidth, imageHeight)?.let { putMap("box", it) }
       line.cornerPoints?.let { putArray("cornerPoints", cornerPointsToMap(it)) }
       putArray("recognizedLanguages", langToMap(line.recognizedLanguage))
 
@@ -125,6 +168,20 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
         })
       }
       putArray("elements", elementsArray)
+
+      if (includeWords) {
+        val wordsArray = Arguments.createArray()
+        line.elements.forEach { element ->
+          wordsArray.pushMap(Arguments.createMap().apply {
+            putString("text", element.text)
+            normalizedBox(element.boundingBox, imageWidth, imageHeight)?.let {
+              putMap("box", it)
+            }
+            element.confidence?.let { putDouble("confidence", it.toDouble()) }
+          })
+        }
+        putArray("words", wordsArray)
+      }
     }
   }
 
@@ -157,7 +214,7 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
   private fun sortedLines(visionText: Text, confidenceThreshold: Float): List<Text.Line> {
     return visionText.textBlocks
       .flatMap { block -> block.lines }
-      .filter { line -> lineConfidence(line) >= confidenceThreshold }
+      .filter { line -> (lineConfidence(line) ?: Float.MAX_VALUE) >= confidenceThreshold }
       .sortedWith(compareBy({ it.boundingBox?.top ?: 0 }, { it.boundingBox?.left ?: 0 }))
   }
 
@@ -179,15 +236,36 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
       0.0f
     }
 
+    val includeWords = options?.hasKey("includeWords") == true &&
+      options.getBoolean("includeWords")
+
     val recognizer: TextRecognizer = TextRecognition.getClient(getScriptTextRecognizerOptions(script))
 
     try {
-      val image = getInputImage(reactApplicationContext, url)
+      val region = if (options?.hasKey("regionOfInterest") == true) {
+        options.getMap("regionOfInterest")
+      } else {
+        null
+      }
+      val image = if (region != null) {
+        croppedInputImage(reactApplicationContext, url, region)
+      } else {
+        getInputImage(reactApplicationContext, url)
+      }
+
       recognizer.process(image)
         .addOnSuccessListener { visionText ->
           val lines = sortedLines(visionText, confidenceThreshold)
           if (detailed) {
-            promise.resolve(buildDetailedResult(visionText, lines))
+            promise.resolve(
+              buildDetailedResult(
+                visionText,
+                lines,
+                image.width,
+                image.height,
+                includeWords
+              )
+            )
           } else {
             val linesArray = Arguments.createArray()
             lines.forEach { line -> linesArray.pushString(line.text) }
@@ -209,11 +287,17 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  private fun buildDetailedResult(visionText: Text, lines: List<Text.Line>): WritableMap {
+  private fun buildDetailedResult(
+    visionText: Text,
+    lines: List<Text.Line>,
+    imageWidth: Int,
+    imageHeight: Int,
+    includeWords: Boolean
+  ): WritableMap {
     val lineTexts = lines.map { it.text }
     val detailsArray = Arguments.createArray()
     lines.forEach { line ->
-      detailsArray.pushMap(lineToMap(line))
+      detailsArray.pushMap(lineToMap(line, imageWidth, imageHeight, includeWords))
     }
 
     return Arguments.createMap().apply {
@@ -222,6 +306,7 @@ class TextReaderModule(reactContext: ReactApplicationContext) :
         lineTexts.forEach { pushString(it) }
       })
       putArray("details", detailsArray)
+      putString("coordinateSpace", "normalized-top-left")
     }
   }
 
